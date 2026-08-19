@@ -134,8 +134,7 @@ For the most reliable results, I usually let the automation handle the AC. Howev
 
 Click the button below to import this blueprint directly into Home Assistant:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre‑filled.](https://my.home‑assistant.io/badges/blueprint_import.svg)](https://my.home‑assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/greenFly-bill/pv-surplus-heatpump-controller/refs/heads/main/ac_robots333.yaml)
-
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fzzr122%2Fblueprints%2Frefs%2Fheads%2Fmain%2Fac_robots333)
 
 Or manually copy and paste this URL:
 
