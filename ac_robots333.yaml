@@ -1,0 +1,325 @@
+blueprint:
+  name: Solar Surplus Air Conditioner Control
+  description: >
+    Automatically control an air conditioner using physical button pushers
+    based on household grid power and available solar surplus.
+
+    When grid power is below the ON threshold for a period of time,
+    the selected actions are executed.
+
+    When grid power is above the OFF threshold for a period of time,
+    another set of actions are executed.
+
+    This blueprint is designed for Home Assistant users.
+
+  domain: automation
+
+  input:
+    power_sensor:
+      name: Grid Power Sensor
+      selector:
+        entity:
+          domain: sensor
+
+    on_threshold:
+      name: Surplus Export Threshold (W)
+      default: -500
+      selector:
+        number:
+          min: -5000
+          max: 5000
+          step: 100
+          unit_of_measurement: W
+
+    off_threshold:
+      name: Grid Import Threshold (W)
+      default: 500
+      selector:
+        number:
+          min: -5000
+          max: 5000
+          step: 100
+          unit_of_measurement: W
+
+    duration:
+      name: Required Duration
+      default: 40
+      selector:
+        number:
+          min: 5
+          max: 600
+          step: 5
+          unit_of_measurement: seconds
+
+    power_button:
+      name: Power Button
+      default: []
+      selector:
+        entity:
+          domain: switch
+
+    temp_up_button:
+      name: Temperature Up Button
+      default: []
+      selector:
+        entity:
+          domain: switch
+
+    temp_down_button:
+      name: Temperature Down Button
+      default: []
+      selector:
+        entity:
+          domain: switch
+
+    power_on:
+      name: Turn on AC when solar surplus is available
+      default: true
+      selector:
+        boolean:
+
+    cool_down_steps:
+      name: Temperature Down Presses
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+
+    power_off:
+      name: Turn off AC when grid import is detected
+      default: true
+      selector:
+        boolean:
+
+    warm_up_steps:
+      name: Temperature Up Presses
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+
+    power_delay:
+      name: Delay after Power Button (seconds)
+      description: Wait time before temperature adjustment after pressing power
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 30
+          step: 1
+          unit_of_measurement: seconds
+
+    temp_press_delay:
+      name: Delay between Temperature Presses (seconds)
+      description: Wait time between each temperature button press
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 30
+          step: 1
+          unit_of_measurement: seconds
+
+mode: single
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    below: !input on_threshold
+    for:
+      seconds: !input duration
+    id: pv_on
+
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    above: !input off_threshold
+    for:
+      seconds: !input duration
+    id: pv_off
+
+action:
+  - variables:
+      power_on_var: !input power_on
+      power_off_var: !input power_off
+      power_button_entity: !input power_button
+      temp_down_entity: !input temp_down_button
+      temp_up_entity: !input temp_up_button
+      cool_steps: !input cool_down_steps
+      warm_steps: !input warm_up_steps
+      power_delay_sec: !input power_delay
+      temp_press_delay_sec: !input temp_press_delay
+
+  # Validate required buttons for the selected actions
+  - choose:
+
+      # Power Button required for turning on
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                trigger.id == 'pv_on'
+                and power_on_var == true
+                and (not power_button_entity or power_button_entity is none)
+              }}
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: Solar Surplus Air Conditioner Control
+              message: >
+                Power Button is required when
+                "Turn on AC when solar surplus is available" is enabled.
+
+          - stop: >
+              Power Button is required when
+              "Turn on AC when solar surplus is available" is enabled.
+
+      # Power Button required for turning off
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                trigger.id == 'pv_off'
+                and power_off_var == true
+                and (not power_button_entity or power_button_entity is none)
+              }}
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: Solar Surplus Air Conditioner Control
+              message: >
+                Power Button is required when
+                "Turn off AC when grid import is detected" is enabled.
+
+          - stop: >
+              Power Button is required when
+              "Turn off AC when grid import is detected" is enabled.
+
+      # Temperature Down Button required
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                trigger.id == 'pv_on'
+                and cool_steps | int > 0
+                and (not temp_down_entity or temp_down_entity is none)
+              }}
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: Solar Surplus Air Conditioner Control
+              message: >
+                Temperature Down Button is required when
+                Temperature Down Presses is greater than 0.
+
+          - stop: >
+              Temperature Down Button is required when
+              Temperature Down Presses is greater than 0.
+
+      # Temperature Up Button required
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                trigger.id == 'pv_off'
+                and warm_steps | int > 0
+                and (not temp_up_entity or temp_up_entity is none)
+              }}
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: Solar Surplus Air Conditioner Control
+              message: >
+                Temperature Up Button is required when
+                Temperature Up Presses is greater than 0.
+
+          - stop: >
+              Temperature Up Button is required when
+              Temperature Up Presses is greater than 0.
+
+    default: []
+
+  - choose:
+
+      # Solar Surplus Available
+      - conditions:
+          - condition: trigger
+            id: pv_on
+
+        sequence:
+
+          # Optionally press Power
+          - if:
+              - condition: template
+                value_template: "{{ power_on_var == true }}"
+            then:
+              - service: switch.turn_on
+                target:
+                  entity_id: "{{ power_button_entity }}"
+
+              # Wait before temperature adjustment
+              - delay:
+                  seconds: "{{ power_delay_sec }}"
+
+          # Optionally lower the temperature
+          - if:
+              - condition: template
+                value_template: "{{ cool_steps | int > 0 }}"
+            then:
+              - repeat:
+                  count: "{{ cool_steps | int }}"
+                  sequence:
+                    - service: switch.turn_on
+                      target:
+                        entity_id: "{{ temp_down_entity }}"
+
+                    # Wait before the next press
+                    - if:
+                        - condition: template
+                          value_template: "{{ repeat.index < cool_steps | int }}"
+                      then:
+                        - delay:
+                            seconds: "{{ temp_press_delay_sec }}"
+
+      # Grid Import
+      - conditions:
+          - condition: trigger
+            id: pv_off
+
+        sequence:
+
+          # Optionally press Power
+          - if:
+              - condition: template
+                value_template: "{{ power_off_var == true }}"
+            then:
+              - service: switch.turn_off
+                target:
+                  entity_id: "{{ power_button_entity }}"
+
+              # Wait before temperature adjustment
+              - delay:
+                  seconds: "{{ power_delay_sec }}"
+
+          # Optionally raise the temperature
+          - if:
+              - condition: template
+                value_template: "{{ warm_steps | int > 0 }}"
+            then:
+              - repeat:
+                  count: "{{ warm_steps | int }}"
+                  sequence:
+                    - service: switch.turn_on
+                      target:
+                        entity_id: "{{ temp_up_entity }}"
+
+                    # Wait before the next press (skip after last press)
+                    - if:
+                        - condition: template
+                          value_template: "{{ repeat.index < warm_steps | int }}"
+                      then:
+                        - delay:
+                            seconds: "{{ temp_press_delay_sec }}"
